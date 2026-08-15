@@ -6,6 +6,7 @@ import boto3
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+
 router = APIRouter(
     prefix="/api/feedback",
     tags=["feedback"],
@@ -49,7 +50,9 @@ def create_feedback(payload: FeedbackRequest):
     item = {
         "id": feedback_id,
         "ratings": payload.ratings,
-        "average": Decimal(str(round(average, 2))),
+        "average": Decimal(
+            str(round(average, 2))
+        ),
         "created_at": datetime.now(
             timezone.utc
         ).isoformat(),
@@ -68,7 +71,6 @@ def create_feedback(payload: FeedbackRequest):
 @router.get("/summary")
 def get_feedback_summary():
     response = table.scan()
-
     items = response.get("Items", [])
 
     while "LastEvaluatedKey" in response:
@@ -86,11 +88,16 @@ def get_feedback_summary():
         return {
             "total": 0,
             "average": 0,
-            "question_averages": [0, 0, 0, 0, 0],
+            "question_averages": [
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
         }
 
     total = len(items)
-
     question_totals = [0, 0, 0, 0, 0]
 
     for item in items:
@@ -100,13 +107,13 @@ def get_feedback_summary():
             question_totals[index] += int(rating)
 
     question_averages = [
-        round(total_score / total, 2)
-        for total_score in question_totals
+        round(score / total, 2)
+        for score in question_totals
     ]
 
     overall_average = round(
-        sum(question_averages) /
-        len(question_averages),
+        sum(question_averages)
+        / len(question_averages),
         2,
     )
 

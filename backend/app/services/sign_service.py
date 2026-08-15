@@ -153,6 +153,7 @@ def predict_sign_sequence(
     )
 
     return {
+        "margin": prediction_margin,
         "label": predicted_label,
         "text": predicted_text,
         "confidence": best_confidence,

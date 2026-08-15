@@ -4,6 +4,8 @@ import SpeechToTextPage from "./pages/SpeechToTextPage";
 import TextToSpeechPage from "./pages/TextToSpeechPage";
 import SignToTextPage from "./pages/SignToTextPage";
 
+import UsabilityFeedback from "./components/UsabilityFeedback";
+
 function App() {
   const [selectedFeature, setSelectedFeature] =
     useState("sign-to-text");
@@ -62,6 +64,8 @@ function App() {
       {selectedFeature === "text-to-speech" && (
         <TextToSpeechPage />
       )}
+
+      <UsabilityFeedback />
     </main>
   );
 }

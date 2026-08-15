@@ -18,6 +18,8 @@ import {
   FRAME_VECTOR_SIZE,
 } from "../utils/holisticFeatures";
 
+import { translateSignLabels } from "../utils/signSentence";
+
 const MEDIAPIPE_WASM_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
 
@@ -34,8 +36,8 @@ const SAMPLE_INTERVAL_SECONDS = 0.04;
 // Gửi một lần dự đoán sau khoảng 1,2 giây.
 const PREDICTION_INTERVAL_SECONDS = 0.8;
 
-// Ít nhất 20/30 frame phải nhìn thấy một hoặc hai tay.
-const MIN_HAND_FRAMES = 20;
+// Ít nhất 15/30 frame phải nhìn thấy một hoặc hai tay.
+const MIN_HAND_FRAMES = 15;
 
 // Ngưỡng tin cậy để frontend chấp nhận kết quả.
 const MIN_CONFIDENCE = 0.30;
@@ -67,6 +69,8 @@ function SignToTextPage() {
   const predictionHistoryRef = useRef([]);
 
   const lastCommittedLabelRef = useRef("");
+
+  const sentenceLabelsRef = useRef([]);
 
   const [modelStatus, setModelStatus] = useState(
     "Đang tải mô hình MediaPipe...",
@@ -249,13 +253,14 @@ function SignToTextPage() {
         lastCommittedLabelRef.current !== result.label;
 
       if (isDifferentLabel) {
-        setRecognizedText((currentText) => {
-          if (!currentText.trim()) {
-            return result.text;
-          }
+        sentenceLabelsRef.current = [
+          ...sentenceLabelsRef.current,
+          result.label,
+        ];
 
-          return `${currentText} ${result.text}`;
-        });
+        const translatedText = translateSignLabels(sentenceLabelsRef.current);
+
+        setRecognizedText(translatedText);
 
         lastCommittedLabelRef.current = result.label;
 
@@ -473,10 +478,7 @@ function SignToTextPage() {
         });
 
         // Một tay luôn được lưu vào vùng tay phải.
-        if (
-          leftHandLandmarks &&
-          !rightHandLandmarks
-        ) {
+        if (leftHandLandmarks && !rightHandLandmarks) {
           rightHandLandmarks = leftHandLandmarks;
           leftHandLandmarks = null;
         }
@@ -688,6 +690,7 @@ function SignToTextPage() {
 
     predictionHistoryRef.current = [];
     lastCommittedLabelRef.current = "";
+    sentenceLabelsRef.current = [];
   }
 
   return (

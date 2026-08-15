@@ -8,7 +8,6 @@ import joblib
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
-from sklearn.model_selection import train_test_split
 
 from holistic_features import FRAME_VECTOR_SIZE
 
@@ -32,32 +31,41 @@ MODEL_PATH = (
 
 SEQUENCE_LENGTH = 30
 MIN_SAMPLES_PER_LABEL = 5
-MIN_DETECTED_HAND_FRAMES = 20
+MIN_DETECTED_HAND_FRAMES = 15
 
 LABEL_TEXT = {
     "xin_chao": "Xin chào",
     "giup_do": "giúp đỡ", 
     "cam_on": "Cảm ơn",
     "co": "Có",
+    "cong_nghe": "Công nghệ",
     "khong": "Không",
     "khong_cho": "không cho",
+    "khong_biet": "không biết",
     "can": "cần",
+    "cho_1": "chợ",
+    "day": "dạy",
     "muon": "muốn",
     "di": "đi",
     "uong": "uống",
     "an": "ăn",
     "yeu": "yêu",
     "ban": "bạn",
+    "ban_1": "bận",
+    "buon": "buồn",
+    "biet": "biết",
     "toi": "Tôi",
+    "thich": "thích",
     "hoc": "học",
     "lam": "làm",
     "nha": "nhà",
     "truong": "trường",
-    "lotte_mart": "Lotte Mart",
     "sieu_thi": "siêu thị",
     "ve": "về",
+    "vui": "vui",
     "den": "đến",
-    }
+    "no_sign": "",
+}
 
 SENTENCE_PATTERNS = {
     ("toi", "yeu", "ban"):
@@ -79,7 +87,12 @@ SENTENCE_PATTERNS = {
         "Tôi muốn uống.",
 }
 
-def load_samples() -> Tuple[np.ndarray, np.ndarray, Counter]:
+def load_samples() -> Tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    Counter,
+]:
     if not DATA_DIR.exists():
         raise FileNotFoundError(
             f"Không tìm thấy thư mục dữ liệu: {DATA_DIR}"
@@ -87,6 +100,7 @@ def load_samples() -> Tuple[np.ndarray, np.ndarray, Counter]:
 
     features: List[np.ndarray] = []
     labels: List[str] = []
+    groups: List[str] = []
     skipped_files: List[str] = []
 
     json_files = sorted(DATA_DIR.rglob("*.json"))
@@ -149,8 +163,21 @@ def load_samples() -> Tuple[np.ndarray, np.ndarray, Counter]:
                     "Dữ liệu chứa NaN hoặc giá trị vô hạn."
                 )
 
+            source_video = str(
+                data.get("source_video", "")
+            ).strip()
+
+            if not source_video:
+                source_video = json_path.name
+
             features.append(frames.reshape(-1))
             labels.append(label)
+
+            # Các đoạn cắt từ cùng một video nguồn phải ở cùng
+            # một phía train hoặc test để tránh rò rỉ dữ liệu.
+            groups.append(
+                f"{label}:{source_video}"
+            )
 
         except Exception as error:
             skipped_files.append(
@@ -170,12 +197,84 @@ def load_samples() -> Tuple[np.ndarray, np.ndarray, Counter]:
 
     x = np.asarray(features, dtype=np.float32)
     y = np.asarray(labels)
+    group_array = np.asarray(groups)
 
     label_counts = Counter(
         str(label) for label in labels
     )
 
-    return x, y, label_counts
+    return x, y, group_array, label_counts
+
+
+def create_group_aware_split(
+    features: np.ndarray,
+    labels: np.ndarray,
+    groups: np.ndarray,
+):
+    rng = np.random.default_rng(42)
+
+    train_indices = []
+    test_indices = []
+
+    unique_labels = sorted(
+        set(labels.tolist())
+    )
+
+    for label in unique_labels:
+        label_indices = np.where(
+            labels == label
+        )[0]
+
+        label_groups = sorted(
+            set(groups[label_indices].tolist())
+        )
+
+        # Cần ít nhất 2 video nguồn cho nhãn này.
+        if len(label_groups) < 2:
+            return None
+
+        shuffled_groups = list(label_groups)
+        rng.shuffle(shuffled_groups)
+
+        # Ít nhất 1 video cho test,
+        # nhưng luôn để lại ít nhất 1 video cho train.
+        test_group_count = max(
+            1,
+            round(len(shuffled_groups) * 0.2),
+        )
+
+        test_group_count = min(
+            test_group_count,
+            len(shuffled_groups) - 1,
+        )
+
+        test_groups = set(
+            shuffled_groups[:test_group_count]
+        )
+
+        for index in label_indices:
+            if groups[index] in test_groups:
+                test_indices.append(index)
+            else:
+                train_indices.append(index)
+
+    train_indices = np.asarray(
+        train_indices,
+        dtype=int,
+    )
+
+    test_indices = np.asarray(
+        test_indices,
+        dtype=int,
+    )
+
+    if (
+        len(train_indices) == 0
+        or len(test_indices) == 0
+    ):
+        return None
+
+    return train_indices, test_indices
 
 
 def train_model() -> None:
@@ -185,7 +284,7 @@ def train_model() -> None:
         f"{SEQUENCE_LENGTH} × {FRAME_VECTOR_SIZE}"
     )
 
-    features, labels, label_counts = load_samples()
+    features, labels, groups, label_counts = load_samples()
 
     missing_label_text = sorted(
         set(label_counts.keys())
@@ -224,72 +323,54 @@ def train_model() -> None:
             f"Các nhãn còn thiếu: {insufficient_labels}"
         )
 
-    minimum_label_count = min(
-        label_counts.values()
-    )
-
     number_of_classes = len(label_counts)
     number_of_samples = len(features)
 
-    # Số mẫu kiểm thử dự kiến nếu lấy 20%.
-    test_sample_count = int(
-        np.ceil(number_of_samples * 0.2)
+    split_indices = create_group_aware_split(
+        features,
+        labels,
+        groups,
     )
 
-    # Khi stratify:
-    # - Mỗi lớp phải có ít nhất 2 mẫu.
-    # - Tập test phải chứa ít nhất 1 mẫu cho mỗi lớp.
-    # - Tập train cũng phải chứa ít nhất 1 mẫu cho mỗi lớp.
-    can_create_test_set = (
-        minimum_label_count >= 2
-        and test_sample_count >= number_of_classes
-        and (
-            number_of_samples - test_sample_count
-            >= number_of_classes
-        )
-    )
+    if split_indices is not None:
+        train_indices, test_indices = split_indices
 
-    if can_create_test_set:
-        x_train, x_test, y_train, y_test = (
-            train_test_split(
-                features,
-                labels,
-                test_size=test_sample_count,
-                random_state=42,
-                stratify=labels,
-            )
-        )
+        x_train = features[train_indices]
+        x_test = features[test_indices]
+        y_train = labels[train_indices]
+        y_test = labels[test_indices]
 
         has_test_set = True
+
         print(
-            "\nĐã chia dữ liệu:"
+            "\nĐã chia dữ liệu theo video nguồn:"
             f"\n- Train: {len(x_train)} mẫu"
             f"\n- Test: {len(x_test)} mẫu"
+            f"\n- Số nhãn: {number_of_classes}"
         )
     else:
         print(
-            "\nCảnh báo: dữ liệu quá ít để chia "
-            "tập huấn luyện và kiểm thử."
+            "\nCảnh báo: chưa thể tạo tập test độc lập "
+            "theo video nguồn."
         )
-
+        print(
+            "Mỗi nhãn nên có ít nhất 2 video nguồn khác nhau "
+            "để tránh đưa các đoạn cắt gần giống nhau vào cả "
+            "train và test."
+        )
         print(
             f"- Tổng số mẫu: {number_of_samples}"
             f"\n- Số nhãn: {number_of_classes}"
-            f"\n- Số mẫu test dự kiến: "
-            f"{test_sample_count}"
-            f"\n- Số mẫu ít nhất trong một nhãn: "
-            f"{minimum_label_count}"
         )
-        
         print(
-            "Mô hình sẽ học bằng toàn bộ dữ liệu."
+            "Mô hình sẽ học bằng toàn bộ dữ liệu; "
+            "không báo test accuracy độc lập."
         )
 
         x_train = features
         y_train = labels
         x_test = None
         y_test = None
-
         has_test_set = False
 
     print("\nĐang huấn luyện mô hình...")
@@ -392,6 +473,11 @@ def train_model() -> None:
         "label_counts": dict(label_counts),
         "has_test_set": has_test_set,
         "test_accuracy": test_accuracy,
+        "evaluation_split": (
+            "group_by_source_video"
+            if has_test_set
+            else None
+        ),
         "trained_at": datetime.now(
             timezone.utc
         ).isoformat(),

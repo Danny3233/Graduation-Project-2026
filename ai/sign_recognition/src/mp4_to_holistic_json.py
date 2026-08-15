@@ -3,6 +3,7 @@ import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 import cv2
@@ -101,6 +102,26 @@ def parse_arguments() -> argparse.Namespace:
         help=(
             "Số khung hình tối thiểu phải phát hiện được bàn tay. "
             "Mặc định: 15/30."
+        ),
+    )
+
+    parser.add_argument(
+        "--start-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Thời điểm bắt đầu của một lần thực hiện ký hiệu. "
+            "Ví dụ: 1.3."
+        ),
+    )
+
+    parser.add_argument(
+        "--end-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Thời điểm kết thúc của một lần thực hiện ký hiệu. "
+            "Ví dụ: 2.8."
         ),
     )
 
@@ -213,6 +234,8 @@ def extract_sequence(
     hand_model_path: Path,
     pose_model_path: Path,
     face_model_path: Path,
+    start_seconds: Optional[float] = None,
+    end_seconds: Optional[float] = None,
 ) -> tuple[list[list[float]], dict]:
     capture = cv2.VideoCapture(str(video_path))
 
@@ -230,16 +253,46 @@ def extract_sequence(
             f"Video chỉ có {total_frames} khung hình. "
             f"Cần ít nhất {SEQUENCE_LENGTH} khung hình."
         )
-    # Bỏ qua 15% đầu và 15% cuối video vì có thể chưa thực hiện ký hiệu.
-    start_frame = int(total_frames * 0.15)
-    end_frame = int(total_frames * 0.85)
+    video_duration_seconds = total_frames / fps
 
-    # Nếu phần video còn lại quá ngắn thì sử dụng toàn bộ video.
-    if end_frame - start_frame < SEQUENCE_LENGTH:
-        start_frame = 0
-        end_frame = total_frames - 1
+    # Quan trọng: một mẫu huấn luyện chỉ nên chứa MỘT lần thực hiện
+    # ký hiệu. Nếu video dài có nhiều lần lặp, dùng --start-seconds
+    # và --end-seconds để cắt đúng một lần thực hiện.
+    if start_seconds is not None or end_seconds is not None:
+        segment_start = (
+            0.0 if start_seconds is None
+            else max(0.0, float(start_seconds))
+        )
+        segment_end = (
+            video_duration_seconds if end_seconds is None
+            else min(video_duration_seconds, float(end_seconds))
+        )
 
-    # Chọn đều 30 khung hình từ đầu đến cuối video.
+        if segment_end <= segment_start:
+            capture.release()
+            raise ValueError(
+                "--end-seconds phải lớn hơn --start-seconds."
+            )
+
+        start_frame = int(round(segment_start * fps))
+        end_frame = int(round(segment_end * fps))
+        start_frame = min(max(start_frame, 0), total_frames - 1)
+        end_frame = min(max(end_frame, 0), total_frames - 1)
+    else:
+        # Chế độ tương thích cũ: bỏ 15% đầu/cuối. Chỉ nên dùng
+        # khi video thực sự chỉ chứa một lần thực hiện ký hiệu.
+        start_frame = int(total_frames * 0.15)
+        end_frame = int(total_frames * 0.85)
+
+    if end_frame - start_frame + 1 < SEQUENCE_LENGTH:
+        capture.release()
+        raise ValueError(
+            "Đoạn video được chọn quá ngắn: "
+            f"{end_frame - start_frame + 1} frame. "
+            f"Cần ít nhất {SEQUENCE_LENGTH} frame."
+        )
+
+    # Resample đều đúng 30 frame trong MỘT lần thực hiện.
     selected_indices = np.linspace(
         start_frame,
         end_frame,
@@ -271,9 +324,9 @@ def extract_sequence(
         ),
         running_mode=RunningMode.VIDEO,
         num_hands=2,
-        min_hand_detection_confidence=0.35,
-        min_hand_presence_confidence=0.35,
-        min_tracking_confidence=0.35,
+        min_hand_detection_confidence=0.4,
+        min_hand_presence_confidence=0.4,
+        min_tracking_confidence=0.4,
     )
 
     pose_options = PoseLandmarkerOptions(
@@ -282,9 +335,9 @@ def extract_sequence(
         ),
         running_mode=RunningMode.VIDEO,
         num_poses=1,
-        min_pose_detection_confidence=0.35,
-        min_pose_presence_confidence=0.35,
-        min_tracking_confidence=0.35,
+        min_pose_detection_confidence=0.4,
+        min_pose_presence_confidence=0.4,
+        min_tracking_confidence=0.4,
     )
 
     face_options = FaceLandmarkerOptions(
@@ -294,9 +347,9 @@ def extract_sequence(
         running_mode=RunningMode.VIDEO,
         num_faces=1,
         output_face_blendshapes=True,
-        min_face_detection_confidence=0.35,
-        min_face_presence_confidence=0.35,
-        min_tracking_confidence=0.35,
+        min_face_detection_confidence=0.4,
+        min_face_presence_confidence=0.4,
+        min_tracking_confidence=0.4,
     )
 
     frames: list[list[float]] = []
@@ -443,6 +496,9 @@ def extract_sequence(
         "original_frame_count": total_frames,
         "original_fps": fps,
         "selected_frame_count": len(frames),
+        "segment_start_seconds": start_frame / fps,
+        "segment_end_seconds": end_frame / fps,
+        "segment_duration_seconds": (end_frame - start_frame) / fps,
 
         "detected_hand_frames": detected_frames,
         "detected_pose_frames": detected_pose_frames,
@@ -594,13 +650,18 @@ def main() -> None:
         hand_model_path=hand_model_path,
         pose_model_path=pose_model_path,
         face_model_path=face_model_path,
+        start_seconds=arguments.start_seconds,
+        end_seconds=arguments.end_seconds,
     )
 
     detected_frames = metadata[
         "detected_hand_frames"
     ]
 
-    if detected_frames < arguments.min_detected_frames:
+    if (
+        label != "no_sign"
+        and detected_frames < arguments.min_detected_frames
+    ):
         raise RuntimeError(
             "MediaPipe chỉ phát hiện bàn tay trong "
             f"{detected_frames}/{SEQUENCE_LENGTH} "
@@ -617,6 +678,12 @@ def main() -> None:
 
     print("\nChuyển đổi thành công")
     print(f"- Số frame: {len(frames)}")
+    print(
+        "- Đoạn video: "
+        f"{metadata['segment_start_seconds']:.2f}s → "
+        f"{metadata['segment_end_seconds']:.2f}s "
+        f"({metadata['segment_duration_seconds']:.2f}s)"
+    )
     print(
         "- Frame có bàn tay: "
         f"{detected_frames}/{SEQUENCE_LENGTH}"

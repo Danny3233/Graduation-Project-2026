@@ -24,8 +24,8 @@ body {
 }
 
 .app {
-  width: min(800px, calc(100% - 32px));
-  margin: 60px auto;
+  width: 100%;
+  max-width: 1200px;
 }
 
 h1 {
@@ -93,6 +93,17 @@ button:hover {
   opacity: 0.9;
 }
 
+.text-input:focus,
+.select-input:focus {
+  border-color: #2563eb;
+  outline: 3px solid rgb(37 99 235 / 15%);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .listening-status {
   margin-bottom: 12px;
 }
@@ -120,6 +131,40 @@ button:hover {
   margin-top: 16px;
   color: #b91c1c;
   font-weight: 600;
+}
+
+.speech-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.speech-status-grid p {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+}
+
+.speech-result-panel {
+  margin-top: 20px;
+}
+
+.speech-result-panel .continuous-transcript {
+  min-height: 180px;
+  font-size: 1.5rem;
+}
+
+.interim-transcript {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+@media (max-width: 850px) {
+  .speech-status-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Text-to-Speech Styles */
@@ -206,6 +251,18 @@ button:disabled {
 }
 
 /* Sign-To-Text Styles */
+.sign-recognition-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+  gap: 24px;
+  align-items: start;
+  width: 100%;
+}
+
+.sign-camera-column {
+  min-width: 0;
+}
+
 .camera-status-grid {
   display: flex;
   flex-wrap: wrap;
@@ -297,12 +354,7 @@ button:disabled {
   min-width: 0;
 }
 
-.camera-container {
-  position: relative;
-  width: 100%;
-  overflow: hidden;
-  border-radius: 16px;
-}
+
 
 .camera-video {
   display: block;
@@ -345,4 +397,51 @@ button:disabled {
   width: auto;
   min-width: 190px;
   max-width: 260px;
+}
+
+/* Usability Survey Styles */
+.usability-section {
+  margin-top: 40px;
+}
+
+.usability-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0 24px;
+  color: #6b7280;
+}
+
+.usability-question {
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.rating-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rating-button {
+  width: 48px;
+  min-width: 48px;
+  padding: 10px;
+  border: 2px solid #d1d5db;
+  background: white;
+  color: #1f2937;
+}
+
+.rating-button.selected {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: white;
+}
+
+.feedback-success {
+  margin-top: 16px;
+  font-weight: 700;
 }
