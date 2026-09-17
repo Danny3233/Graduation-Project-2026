@@ -289,16 +289,22 @@ Microphone
 
 Open a terminal and navigate to the backend directory:
 
+```bash
 cd backend
+```
 
 Create and activate a Python virtual environment:
 
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
+```
 
 Install dependencies:
 
+```bash
 pip install -r requirements.txt
+```
 
 Run the FastAPI server:
 
@@ -306,27 +312,38 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 The backend will be available at:
 
+```text
 http://127.0.0.1:8000
+```
 
 Swagger documentation:
 
+```text
 http://127.0.0.1:8000/docs
+```
 
 ### 8.3 Run Frontend
 
 Open another terminal:
 
+```bash
 cd frontend
+```
 
 Install dependencies:
 
+```bash
 npm install
+```
 
 Start the Vite development server:
 
+```bash
 npm run dev
+```
 
 The frontend will normally be available at:
 
+```text
 http://localhost:5173
-
+```
