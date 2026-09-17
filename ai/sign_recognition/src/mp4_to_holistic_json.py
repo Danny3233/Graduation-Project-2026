@@ -111,7 +111,7 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         help=(
             "Thời điểm bắt đầu của một lần thực hiện ký hiệu. "
-            "Ví dụ: 1.3."
+            "Ví dụ: 1.0."
         ),
     )
 
@@ -177,10 +177,7 @@ def build_frame_vector(
         else:
             right_hand = hand_vector
 
-    # Một tay luôn được xem là tay phải chính.
-    if left_hand is not None and right_hand is None:
-        right_hand = left_hand
-        left_hand = None
+   # Không tự chuyển tay trái thành tay phải.
 
     pose_landmarks = None
 

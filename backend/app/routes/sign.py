@@ -5,14 +5,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
 
-from app.schemas.sign_schema import (
-    HandSampleRequest,
-    SaveSampleResponse,
-    SaveSequenceResponse,
-    SignPredictionRequest,
-    SignPredictionResponse,
-    SignSequenceRequest,
-)
+import app.schemas.sign_schema
 
 from app.services.sign_service import (
     predict_sign_sequence,
@@ -29,11 +22,11 @@ DATASET_DIR = BACKEND_DIR / "data" / "sign_samples"
 
 @router.post(
     "/samples",
-    response_model=SaveSampleResponse,
+    response_model=app.schemas.sign_schema.SaveSampleResponse,
 )
 def save_sign_sample(
-    sample: HandSampleRequest,
-) -> SaveSampleResponse:
+    sample: app.schemas.sign_schema.HandSampleRequest,
+) -> app.schemas.sign_schema.SaveSampleResponse:
     if not sample.landmarks:
         raise HTTPException(
             status_code=400,
@@ -82,7 +75,7 @@ def save_sign_sample(
             indent=2,
         )
 
-    return SaveSampleResponse(
+    return app.schemas.sign_schema.SaveSampleResponse(
         message="Đã lưu mẫu ký hiệu",
         label=sample.label,
         filename=filename,
@@ -91,17 +84,17 @@ def save_sign_sample(
 
 @router.post(
     "/predict-sequence",
-    response_model=SignPredictionResponse,
+    response_model=app.schemas.sign_schema.SignPredictionResponse,
 )
 def predict_sequence(
-    request: SignPredictionRequest,
-) -> SignPredictionResponse:
+    request: app.schemas.sign_schema.SignPredictionRequest,
+) -> app.schemas.sign_schema.SignPredictionResponse:
     try:
         prediction = predict_sign_sequence(
             request.frames,
         )
 
-        return SignPredictionResponse(
+        return app.schemas.sign_schema.SignPredictionResponse(
             label=str(prediction["label"]),
             text=str(prediction["text"]),
             confidence=float(

@@ -18,7 +18,7 @@ import {
   FRAME_VECTOR_SIZE,
 } from "../utils/holisticFeatures";
 
-import { translateSignLabels } from "../utils/signSentence";
+import { processSignLabels } from "../services/nlpService";
 
 const MEDIAPIPE_WASM_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
@@ -29,21 +29,25 @@ const FACE_MODEL_PATH = "/models/face_landmarker.task";
 
 const SEQUENCE_LENGTH = 30;
 
-// Lấy một frame sau mỗi 0,05 giây.
-// 30 frame tương đương khoảng 1,5 giây.
+// Gửi một lần lấy mẫu sau khoảng 0,04 giây.
 const SAMPLE_INTERVAL_SECONDS = 0.04;
 
-// Gửi một lần dự đoán sau khoảng 1,2 giây.
-const PREDICTION_INTERVAL_SECONDS = 0.8;
+// Gửi một lần dự đoán sau khoảng 0,5 giây.
+const PREDICTION_INTERVAL_SECONDS = 0.5;
 
 // Ít nhất 15/30 frame phải nhìn thấy một hoặc hai tay.
 const MIN_HAND_FRAMES = 15;
+
+// Nếu không nhìn thấy tay trong 20 frame liên tiếp, kết thúc câu hiện tại.
+const SENTENCE_END_NO_HAND_SAMPLES = 20;
 
 // Ngưỡng tin cậy để frontend chấp nhận kết quả.
 const MIN_CONFIDENCE = 0.30;
 
 // Cần hai kết quả liên tiếp giống nhau mới ghép vào văn bản.
 const REQUIRED_STABLE_PREDICTIONS = 2;
+
+const MODELS_READY = "Các mô hình dạng ký hiệu đã sẵn sàng";
 
 function SignToTextPage() {
   const videoRef = useRef(null);
@@ -71,6 +75,7 @@ function SignToTextPage() {
   const lastCommittedLabelRef = useRef("");
 
   const sentenceLabelsRef = useRef([]);
+  const transcriptRef = useRef("");
 
   const [modelStatus, setModelStatus] = useState(
     "Đang tải mô hình MediaPipe...",
@@ -151,9 +156,7 @@ function SignToTextPage() {
         poseLandmarkerRef.current = poseLandmarker;
         faceLandmarkerRef.current = faceLandmarker;
 
-        setModelStatus(
-          "Các mô hình MediaPipe đã sẵn sàng",
-        );
+        setModelStatus(MODELS_READY);
       } catch (initializationError) {
         console.error(initializationError);
 
@@ -162,7 +165,7 @@ function SignToTextPage() {
         faceLandmarker?.close();
 
         setModelStatus(
-          "Không thể tải đầy đủ mô hình MediaPipe",
+          "Không thể tải đầy đủ mô hình dạng ký hiệu",
         );
 
         setError(initializationError.message);
@@ -253,16 +256,24 @@ function SignToTextPage() {
         lastCommittedLabelRef.current !== result.label;
 
       if (isDifferentLabel) {
-        sentenceLabelsRef.current = [
-          ...sentenceLabelsRef.current,
-          result.label,
-        ];
+      sentenceLabelsRef.current = [
+        ...sentenceLabelsRef.current,
+        result.label,
+      ];
 
-        const translatedText = translateSignLabels(sentenceLabelsRef.current);
+      const translatedText = processSignLabels(
+        sentenceLabelsRef.current,
+      );
 
-        setRecognizedText(translatedText);
+      const previousText = transcriptRef.current;
 
-        lastCommittedLabelRef.current = result.label;
+      const displayText = previousText
+        ? `${previousText} ${translatedText}`
+        : translatedText;
+
+      setRecognizedText(displayText);
+
+      lastCommittedLabelRef.current = result.label;
 
         setRecognitionStatus(
           `Đã nhận dạng và ghép: “${result.text}”.`,
@@ -320,14 +331,7 @@ function SignToTextPage() {
         video,
         timestamp,
       );
-
-      // Kiểm tra MediaPipe đang nhận tay trái hay tay phải
-      console.log(
-        results.handedness?.map(
-          (item) => item?.[0]?.categoryName,
-        ),
-      );
-
+      
       // 2. Phát hiện cơ thể
       const poseResults = poseLandmarker.detectForVideo(
         video,
@@ -521,7 +525,25 @@ function SignToTextPage() {
           noHandSamplesRef.current += 1;
         }
 
-        if (noHandSamplesRef.current >= 5) {
+        if (noHandSamplesRef.current >= SENTENCE_END_NO_HAND_SAMPLES) {
+          // Kết thúc câu hiện tại.
+          if (sentenceLabelsRef.current.length > 0) {
+            const currentSentence = processSignLabels(
+              sentenceLabelsRef.current,
+            );
+
+            if (currentSentence) {
+              transcriptRef.current = transcriptRef.current
+                ? `${transcriptRef.current} ${currentSentence}`
+                : currentSentence;
+
+              setRecognizedText(transcriptRef.current);
+            }
+          }
+
+          // Bắt đầu câu mới.
+          sentenceLabelsRef.current = [];
+
           frameWindowRef.current = [];
           handPresenceWindowRef.current = [];
           predictionHistoryRef.current = [];
@@ -691,6 +713,7 @@ function SignToTextPage() {
     predictionHistoryRef.current = [];
     lastCommittedLabelRef.current = "";
     sentenceLabelsRef.current = [];
+    transcriptRef.current = "";
   }
 
   return (
@@ -741,7 +764,7 @@ function SignToTextPage() {
                 type="button"
                 className="primary-button"
                 onClick={startCamera}
-                disabled={modelStatus !== "Các mô hình MediaPipe đã sẵn sàng"}
+                disabled={modelStatus !== MODELS_READY}
               >
                 Mở camera
               </button>

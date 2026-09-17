@@ -5,7 +5,7 @@ from app.routes.sign import router as sign_router
 from app.routes.feedback import router as feedback_router
 
 app = FastAPI(
-    title="Deaf Communication System API",
+    title="Hệ thống hỗ trợ giao tiếp cho người Điếc đang chạy API",
     version="0.1.0",
 )
 
@@ -28,13 +28,13 @@ app.include_router(feedback_router)
 @app.get("/")
 def root():
     return {
-        "message": "Deaf Communication System API"
+        "message": "Hệ thống hỗ trợ giao tiếp cho người Điếc đang chạy API"
     }
 
 
 @app.get("/api/health")
 def health_check():
     return {
-        "status": "ok",
-        "message": "Backend is running",
+        "status": "ổn định",
+        "message": "Backend đang chạy ổn định",
     }

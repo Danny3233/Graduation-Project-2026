@@ -34,12 +34,12 @@ MIN_SAMPLES_PER_LABEL = 5
 MIN_DETECTED_HAND_FRAMES = 15
 
 LABEL_TEXT = {
-    "xin_chao": "Xin chào",
+    "xin_chao": "xin chào",
     "giup_do": "giúp đỡ", 
-    "cam_on": "Cảm ơn",
-    "co": "Có",
-    "cong_nghe": "Công nghệ",
-    "khong": "Không",
+    "cam_on": "cảm ơn",
+    "co": "có",
+    "cong_nghe": "công nghệ",
+    "khong": "không",
     "khong_cho": "không cho",
     "khong_biet": "không biết",
     "can": "cần",
@@ -54,7 +54,7 @@ LABEL_TEXT = {
     "ban_1": "bận",
     "buon": "buồn",
     "biet": "biết",
-    "toi": "Tôi",
+    "toi": "tôi",
     "thich": "thích",
     "hoc": "học",
     "lam": "làm",
@@ -110,7 +110,16 @@ def load_samples() -> Tuple[
             f"Không tìm thấy file JSON trong: {DATA_DIR}"
         )
 
-    for json_path in json_files:
+    for index, json_path in enumerate(
+        json_files,
+        start=1,
+    ):
+        print(
+            f"[{index}/{len(json_files)}] "
+            f"Đang xử lý: {json_path.name}",
+            flush=True,
+        )
+        
         try:
             data = json.loads(
                 json_path.read_text(encoding="utf-8")
@@ -162,6 +171,14 @@ def load_samples() -> Tuple[
                 raise ValueError(
                     "Dữ liệu chứa NaN hoặc giá trị vô hạn."
                 )
+
+            print(
+                f"    ✓ Hợp lệ | "
+                f"label={label} | "
+                f"shape={frames.shape} | "
+                f"hands={detected_hand_frames}/{SEQUENCE_LENGTH}",
+                flush=True,
+            )
 
             source_video = str(
                 data.get("source_video", "")
@@ -402,6 +419,18 @@ def train_model() -> None:
             f"{test_accuracy:.4f}"
         )
 
+        # Chi tiết từng mẫu test
+        print("\nChi tiết dự đoán test:")
+
+        for true_label, pred_label in zip(
+            y_test,
+            predictions,
+        ):
+            print(
+                f"TRUE={true_label:12s} "
+                f"PRED={pred_label}"
+            )
+
         print("\nBáo cáo phân loại:")
 
         print(
@@ -455,6 +484,17 @@ def train_model() -> None:
 
     model_bundle = {
         "model": final_model,
+
+        "sequence_length": SEQUENCE_LENGTH,
+        "frame_vector_size": FRAME_VECTOR_SIZE,
+        "feature_count": SEQUENCE_LENGTH * FRAME_VECTOR_SIZE,
+
+        "preprocessing": {
+            "normalization": "shoulder_center",
+            "scale": "shoulder_distance",
+            "hand_representation": "left_right_preserved",
+        },
+
         "label_text": LABEL_TEXT,
         "sentence_patterns": [
             {
@@ -463,21 +503,20 @@ def train_model() -> None:
             }
             for pattern, sentence in SENTENCE_PATTERNS.items()
         ],
-        "sequence_length": SEQUENCE_LENGTH,
-        "frame_vector_size": FRAME_VECTOR_SIZE,
-        "feature_count": (
-            SEQUENCE_LENGTH * FRAME_VECTOR_SIZE
-        ),
+
         "training_samples": len(features),
         "labels": sorted(label_counts.keys()),
         "label_counts": dict(label_counts),
+
         "has_test_set": has_test_set,
         "test_accuracy": test_accuracy,
+
         "evaluation_split": (
             "group_by_source_video"
             if has_test_set
             else None
         ),
+        
         "trained_at": datetime.now(
             timezone.utc
         ).isoformat(),
