@@ -14,7 +14,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "https://main.d2wlefumehyudr.amplifyapp.com",
+        "https://graduation-project-2026-bgvw-jkorpdy38.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

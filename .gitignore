@@ -4,6 +4,7 @@
 # Environment
 .env
 .env.*
+!frontend/.env.production
 !.env.example
 
 # Frontend
