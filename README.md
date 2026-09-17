@@ -232,10 +232,11 @@ ve
 vui
 xin_chao
 yeu
-
+```
 
 ## 7. Project Structure
 
+```text
 deaf-communication-system/
 │
 ├── backend/
@@ -270,6 +271,7 @@ deaf-communication-system/
 │
 ├── .gitignore
 └── README.md
+```
 
 ## 8. Local Development
 ### 8.1 Requirements
