@@ -16,7 +16,7 @@ function App() {
         <h1>Hệ thống hỗ trợ giao tiếp</h1>
 
         <p>
-          Dành cho cộng đồng người Điếc và khiếm thính
+          Dành cho cộng đồng người Điếc và Khiếm thính
         </p>
       </header>
 

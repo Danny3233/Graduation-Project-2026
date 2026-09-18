@@ -131,7 +131,7 @@ function TextToSpeechPage() {
       <h2>Văn bản thành giọng nói</h2>
 
       <p>
-        Người Điếc nhập nội dung cần giao tiếp. Hệ thống sẽ phát nội dung
+        Người dùng nhập nội dung cần giao tiếp. Hệ thống sẽ phát nội dung
         thành giọng nói để người nghe hiểu.
       </p>
 
